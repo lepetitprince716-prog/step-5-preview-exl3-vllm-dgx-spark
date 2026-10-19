@@ -1,0 +1,22 @@
+step5-exl3-2xspark
+Quantization and serving code for Step-5-Preview EXL3 on two NVIDIA DGX Spark.
+
+The code in this repository is licensed under the Apache License, Version 2.0 (LICENSE), except where a file states
+otherwise in its SPDX header. It includes or derives from the following works; their notices are kept in the file
+headers.
+
+- sudoingx dsv41_recipe (Apache-2.0): the quantization passes (p0-p6, step5q/, caldata/, the 2-box scripts) are ports
+  of its DeepSeek-V4.1 scripts; each derived file names the script it was ported from.
+- 0xSero step5_spark vLLM plugin (https://huggingface.co/0xSero/Step-5-Preview-Spark; files carry Apache-2.0 or MIT
+  SPDX headers): serve/patch/step5_spark.orig/ is the plugin as shipped in the serving image, unmodified;
+  serve/patch/step5_spark/ holds modified copies of some of its files plus new modules.
+- vLLM (Apache-2.0, Copyright contributors to the vLLM project): step5.py and step5_mtp.py derive from vLLM model files,
+  as their headers state.
+- TensorFold (Apache-2.0, https://github.com/ashhart/TensorFold, fork https://github.com/bertholomus/TensorFold):
+  serve/patch/step5_spark/tf_exl3/ is vendored from it; see that directory's NOTICE, LICENSE, LICENSE-MIT and
+  PROVENANCE.md.
+- ExLlamaV3 (MIT, Copyright (c) 2025 Turboderp, https://github.com/turboderp-org/exllamav3): the EXL3 format and the
+  kernels used by the quantization passes.
+
+The model weights are not part of this repository. They are a derivative of stepfun-ai/Step-5-Preview and are
+distributed under the StepFun Community License with the checkpoint.

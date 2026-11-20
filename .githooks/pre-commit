@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+python3 -I -B tools/privacy_scan.py --identity --staged
+if ! command -v betterleaks >/dev/null 2>&1; then
+  echo "secret_scan: betterleaks is not on PATH; install with 'brew install betterleaks'" >&2
+  exit 3
+fi
+unset BETTERLEAKS_CONFIG GITLEAKS_CONFIG GITLEAKS_CONFIG_TOML
+BETTERLEAKS_CONFIG_TOML="$(printf "prefilter = 'false'\n\n[extend]\nuseDefault = true\n")"
+export BETTERLEAKS_CONFIG_TOML
+exec betterleaks git --staged --redact --no-banner --no-color --log-level warn

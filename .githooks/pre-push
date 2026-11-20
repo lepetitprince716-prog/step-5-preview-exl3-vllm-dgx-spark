@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+remote_url=${2:-}
+if [ -n "$remote_url" ]; then
+  case "$remote_url" in
+    https://github.com/lepetitprince716-prog/step-5-preview-exl3-vllm-dgx-spark | \
+    https://github.com/lepetitprince716-prog/step-5-preview-exl3-vllm-dgx-spark.git | \
+    git@github.com:lepetitprince716-prog/step-5-preview-exl3-vllm-dgx-spark | \
+    git@github.com:lepetitprince716-prog/step-5-preview-exl3-vllm-dgx-spark.git | \
+    ssh://git@github.com/lepetitprince716-prog/step-5-preview-exl3-vllm-dgx-spark | \
+    ssh://git@github.com/lepetitprince716-prog/step-5-preview-exl3-vllm-dgx-spark.git) ;;
+    *)
+      echo "pre-push: refused: remote URL is not lepetitprince716-prog/step-5-preview-exl3-vllm-dgx-spark" >&2
+      exit 1
+      ;;
+  esac
+fi
+cat >/dev/null || true
+python3 -I -B tools/privacy_scan.py --tracked --history
+if ! command -v betterleaks >/dev/null 2>&1; then
+  echo "secret_scan: betterleaks is not on PATH; install with 'brew install betterleaks'" >&2
+  exit 3
+fi
+unset BETTERLEAKS_CONFIG GITLEAKS_CONFIG GITLEAKS_CONFIG_TOML
+BETTERLEAKS_CONFIG_TOML="$(printf "prefilter = 'false'\n\n[extend]\nuseDefault = true\n")"
+export BETTERLEAKS_CONFIG_TOML
+exec betterleaks git --redact --no-banner --no-color --log-level warn

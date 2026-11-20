@@ -1,0 +1,84 @@
+name: Privacy scan
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privacy-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan tracked files and history (trusted base scanner on PRs)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          scanner=tools/privacy_scan.py
+          rules=tools/privacy_rules.json
+          if [ -n "$BASE_REF" ]; then
+            base=$(git --no-replace-objects show-ref --verify --hash "refs/remotes/origin/$BASE_REF")
+            base=$(git --no-replace-objects rev-parse --verify --quiet --end-of-options "$base^{commit}")
+            git --no-replace-objects show "$base:tools/privacy_scan.py" > "$RUNNER_TEMP/privacy_scan.py"
+            git --no-replace-objects show "$base:tools/privacy_rules.json" > "$RUNNER_TEMP/privacy_rules.json"
+            scanner="$RUNNER_TEMP/privacy_scan.py"
+            rules="$RUNNER_TEMP/privacy_rules.json"
+          fi
+          python3 -I -B "$scanner" --rules "$rules" --no-private --tracked --history
+
+  betterleaks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      BETTERLEAKS_VERSION: "1.10.1"
+      BETTERLEAKS_ARCHIVE: betterleaks_1.10.1_linux_x64.tar.gz
+      BETTERLEAKS_SHA256: c174b42d7aa60caf58c0c3e555c0e4bed01fe6b0d99a412bce777b5af4ce913e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Betterleaks (pinned version, SHA-256 verified)
+        run: |
+          set -eu
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/$BETTERLEAKS_ARCHIVE" \
+            "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/${BETTERLEAKS_ARCHIVE}"
+          echo "${BETTERLEAKS_SHA256}  ${RUNNER_TEMP}/${BETTERLEAKS_ARCHIVE}" | sha256sum --check --strict -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/$BETTERLEAKS_ARCHIVE" -C "$RUNNER_TEMP/bin" betterleaks
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Scan git history with Betterleaks
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          ignore_args=""
+          if [ -n "$BASE_REF" ]; then
+            base=$(git --no-replace-objects show-ref --verify --hash "refs/remotes/origin/$BASE_REF")
+            base=$(git --no-replace-objects rev-parse --verify --quiet --end-of-options "$base^{commit}")
+            if git --no-replace-objects cat-file -e "$base:.betterleaksignore" 2>/dev/null; then
+              git --no-replace-objects show "$base:.betterleaksignore" > "$RUNNER_TEMP/base.betterleaksignore"
+              ignore_args="-i $RUNNER_TEMP/base.betterleaksignore"
+            else
+              : > "$RUNNER_TEMP/empty.ignore"
+              ignore_args="-i $RUNNER_TEMP/empty.ignore"
+            fi
+          fi
+          unset BETTERLEAKS_CONFIG GITLEAKS_CONFIG GITLEAKS_CONFIG_TOML
+          BETTERLEAKS_CONFIG_TOML="$(printf "prefilter = 'false'\n\n[extend]\nuseDefault = true\n")"
+          export BETTERLEAKS_CONFIG_TOML
+          # shellcheck disable=SC2086
+          betterleaks git $ignore_args --redact --no-banner --no-color --log-level warn
